@@ -32,8 +32,13 @@
 #define DURATION_CHANGE_THRESHOLD     0.2   // last pump on duration deviated from the initial averaged duration by 20%
 #define MIN_PERIOD_INTERVAL           10.   // minimum event interval (more freq than this interval will cause alarm.
 
-#define FLASH_LED_PIN         4
-#define PUMP_CT_PIN           15
+   
+#define FLASH_LED_PIN   GPIO_NUM_4
+#define PUMP_CT_PIN     GPIO_NUM_15
+#define WATER_LEVEL_PIN GPIO_NUM_13
+#define BUILT_IN_LED    GPIO_NUM_33
+#define LINE_OK_PIN     GPIO_NUM_1
+#define USE_BAT_PIN     GPIO_NUM_3
 
 
 void startCameraServer();
@@ -50,6 +55,7 @@ float since_last            = 0.;
 bool  pump_on_z             = false;
 bool  system_ok             = true;
 int   new_pump_event_idx    = -1;  // -1 for no new data, yet
+time_t system_restart_time = 0;
 
 int next_pump_record = 0;   // where in the pump_records to add the new pump event
 
@@ -84,8 +90,8 @@ void get_saved_sump_events()
   int32_t magic = EEPROM.readInt(MAGIC_LOC); // read MAGIC word
   if(magic != MAGIC_WORD)
   {
-    Serial.println(String("MAGIC_WORD from EEPROM ") + magic);
-    Serial.println(" **** No MATIC_WORD, Clear EEPROM **** ");
+//    Serial.println(String("MAGIC_WORD from EEPROM ") + magic);
+//    Serial.println(" **** No MAGIC_WORD, Clear EEPROM **** ");
     // clear out all records 
     for (i = 0; i < 64; i++)
     {
@@ -94,11 +100,9 @@ void get_saved_sump_events()
     EEPROM.writeInt(MAGIC_LOC, MAGIC_WORD);
     EEPROM.writeInt(NOMINAL_PUMP_TIME_LOC, 0x0);
     EEPROM.commit();
-    
-    Serial.println(" End Clean EEPROM "); 
+//    Serial.println(" End Clean EEPROM "); 
   }
-
-  Serial.println("start to read EEPROM records");
+//  Serial.println("start to read EEPROM records");
   bool found_next_loc = false;  
   pump_records[0].event_time = EEPROM.readLong(0);
   pump_records[0].duration   = EEPROM.readShort(4);
@@ -137,11 +141,10 @@ void get_saved_sump_events()
     {
       strftime(time_output, 30, "%D %T", localtime(&tm)); 
       sprintf(buf, "%02i) \"%s\",%i\n", i ,time_output, pump_records[i].duration);
-      Serial.print(buf);
+//      Serial.print(buf);
     }
   }
-  Serial.println(String("next_pump_record: ") + next_pump_record); 
-
+//  Serial.println(String("next_pump_record: ") + next_pump_record); 
   int idx = next_pump_record -1;
   if(idx < 0) idx += TOTAL_EEPROM_REC;
   int lastTime = pump_records[idx].event_time;
@@ -265,13 +268,14 @@ void setup_camera()
   // camera init
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
-    Serial.printf("Camera init failed with error 0x%x", err);
+//    Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
 
   sensor_t * s = esp_camera_sensor_get();
   // initial sensors are flipped vertically and colors are a bit saturated
   s->set_vflip(s, 1); // flip it back
+  s->set_hmirror(s, 1);
   s->set_brightness(s, 4); // up the brightness just a bit
   s->set_saturation(s, -2); // lower the saturation
   // drop down frame size for higher initial frame rate
@@ -308,7 +312,7 @@ void setup_wifi()
    // This part of code will try create static IP address
   if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) 
   {
-    Serial.println("STA Failed to configure");
+//    Serial.println("STA Failed to configure");
   }
   WiFi.begin(ssid, password);
   WiFi.setSleep(false);
@@ -316,17 +320,14 @@ void setup_wifi()
   while (WiFi.status() != WL_CONNECTED) 
   {
     delay(500);
-    Serial.print(".");
+//    Serial.print(".");
     if(++retry_cnt > 30) ESP.restart();
-
   }
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.print("Camera Ready! Use 'http://");
   Serial.print(WiFi.localIP());
   Serial.println("' to connect");
-
-
 }
 void setup_OTA()
 {
@@ -348,18 +349,21 @@ void setup_OTA()
     } else { // U_SPIFFS
       type = "filesystem";
     }
-
-    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-    Serial.println("Start updating " + type);
+  // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+//    Serial.println("Start updating " + type);
   });
   ArduinoOTA.onEnd([]() {
-    Serial.println("\nEnd");
+//    Serial.println("\nEnd");
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+//    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+
   });
+/*  
   ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
+
+   Serial.printf("Error[%u]: ", error);
+
     if (error == OTA_AUTH_ERROR) {
       Serial.println("Auth Failed");
     } else if (error == OTA_BEGIN_ERROR) {
@@ -372,6 +376,7 @@ void setup_OTA()
       Serial.println("End Failed");
     }
   });
+ */
   ArduinoOTA.begin();
 }
 
@@ -382,8 +387,8 @@ void check_wifi_connection()
   unsigned long currentMillis = millis();
   // if WiFi is down, try reconnecting
   if ((WiFi.status() != WL_CONNECTED) && (currentMillis - previousMillis >=interval)) {
-    Serial.print(millis());
-    Serial.println("Reconnecting to WiFi...");
+ //   Serial.print(millis());
+ //   Serial.println("Reconnecting to WiFi...");
     WiFi.disconnect();
     WiFi.reconnect();
     previousMillis = currentMillis;
@@ -393,8 +398,9 @@ void check_wifi_connection()
 
 void setup() 
 {
-  Serial.begin(115200);
+//  Serial.begin(115200);
 //  Serial.setDebugOutput(true);    // somehow this will cause the EEPROM.commit() to crash the application
+
   setup_camera();
   setup_wifi();
   setup_OTA();
@@ -408,6 +414,10 @@ void setup()
 
   pinMode(FLASH_LED_PIN, OUTPUT);
   pinMode(PUMP_CT_PIN, INPUT_PULLUP);
+  pinMode(BUILT_IN_LED, OUTPUT);
+  pinMode(LINE_OK_PIN, INPUT);
+  pinMode(USE_BAT_PIN, OUTPUT);
+  
   EEPROM.begin(512);
   get_saved_sump_events();
 
@@ -428,14 +438,46 @@ void loop()
   static bool alarm_from_event = false;  
   static bool alarm_from_update = false;  
   bool pump_on = digitalRead(PUMP_CT_PIN);
+  bool link_ok = true;
+  bool level_limit = digitalRead(WATER_LEVEL_PIN);
   time_t now;
   static time_t last_alarm_msg_sent = 0;
   String alarm_msg;
   int alarm = 0;
   char buf[100];
+  static int time_stable_cnt = 0;
+  
 
+  link_ok = digitalRead(LINE_OK_PIN);
+ 
+  if(link_ok) 
+  {
+    digitalWrite(USE_BAT_PIN, 1);  // use ac line power
+  }
+  else
+  {
+    if(level_limit || pump_on)
+    {
+        digitalWrite(USE_BAT_PIN, 0);  // start using battery power
+    }
+    else
+    {
+      // still no power but pump has topped. We can turn off battery power until water level reached.
+      digitalWrite(USE_BAT_PIN, 1);  // use ac line power
+    }
+  }
+
+  
   time(&now);
 
+  if(now > 100000 && system_restart_time == 0 )
+  {
+    // the time received right after reboot is not accurate. Wait a bit.
+    if(++time_stable_cnt > 10)
+       system_restart_time = now;    
+  }
+
+  
   if (pump_on != pump_on_z)
   {    
     pump_on_z = pump_on;
@@ -482,8 +524,9 @@ void loop()
               alarm = 1;
           }
           float duration_ratio = fabs((float)pump_records[next_pump_record].duration - nominal_pump_on_time) / nominal_pump_on_time;
-          sprintf(buf,"duration_ratio = %f", duration_ratio);
-          Serial.println(buf);
+//         sprintf(buf,"duration_ratio = %f", duration_ratio);
+//         Serial.println(buf);
+
           if(duration_ratio > DURATION_CHANGE_THRESHOLD)
           {
               sprintf(buf,"pump turned on = %i (sec.) while nominal is %.1f (sec.) \n", pump_records[next_pump_record].duration, nominal_pump_on_time);
@@ -510,11 +553,12 @@ void loop()
         //strftime(time_output, 30, "%D %T", localtime(&now)); 
         strftime(time_output, 30, "%D %T", localtime(&now)); 
         sprintf(buf, "\"%s\",%i\n",time_output, now - pump_on_time);   //\n is needed for file 
-        
-        Serial.print(String("appended: ") +  buf);
-    
+//        Serial.print(String("appended: ") +  buf);
+  
       }
-      Serial.println(String("next_pump_record = ") + next_pump_record);
+
+//      Serial.println(String("next_pump_record = ") + next_pump_record);
+
     }
   }
 
@@ -568,6 +612,11 @@ void loop()
   {
     turn_flash_on(false);  
   }
-  delay(1000);
+
+  static bool blinker = true;
+
+  blinker = !blinker;
+  digitalWrite(BUILT_IN_LED, blinker);
+  delay(1000);  
 
 }
