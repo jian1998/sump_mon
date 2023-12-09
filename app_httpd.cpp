@@ -29,6 +29,7 @@ extern float avg_period;
 extern float since_last;
 extern bool  pump_on_z;
 extern bool  system_ok;
+extern bool  link_ok;
 extern time_t system_restart_time;
  
 extern bool get_init_chart_data(char * response);
@@ -410,7 +411,7 @@ static esp_err_t pump_stat_handler(httpd_req_t *req)
     // See http://www.cplusplus.com/reference/ctime/strftime/ for strftime functions
     strftime(restart_time, 30, "%D %T", localtime(&system_restart_time)); 
  
-     sprintf(json_response,"{\"responseText\": [%.1f, %.1f, %.1f, %i, %i, \"%s\"]}",nominal_pump_on_time,avg_period, since_last, pump_on_z, system_ok,restart_time);
+     sprintf(json_response,"{\"responseText\": [%.1f, %.1f, %.1f, %i, %i, %i, \"%s\"]}",nominal_pump_on_time,avg_period, since_last, pump_on_z, system_ok,link_ok, restart_time);
      httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     return httpd_resp_send(req, json_response, strlen(json_response));

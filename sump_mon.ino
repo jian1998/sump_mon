@@ -54,6 +54,7 @@ float avg_period            = 0.;
 float since_last            = 0.;
 bool  pump_on_z             = false;
 bool  system_ok             = true;
+bool link_ok                = true;
 int   new_pump_event_idx    = -1;  // -1 for no new data, yet
 time_t system_restart_time = 0;
 
@@ -417,6 +418,7 @@ void setup()
   pinMode(BUILT_IN_LED, OUTPUT);
   pinMode(LINE_OK_PIN, INPUT);
   pinMode(USE_BAT_PIN, OUTPUT);
+  pinMode(WATER_LEVEL_PIN,INPUT_PULLUP);
   
   EEPROM.begin(512);
   get_saved_sump_events();
@@ -438,7 +440,8 @@ void loop()
   static bool alarm_from_event = false;  
   static bool alarm_from_update = false;  
   bool pump_on = digitalRead(PUMP_CT_PIN);
-  bool link_ok = true;
+
+  static bool line_ok_z = true;
   bool level_limit = digitalRead(WATER_LEVEL_PIN);
   time_t now;
   static time_t last_alarm_msg_sent = 0;
@@ -453,6 +456,11 @@ void loop()
   if(link_ok) 
   {
     digitalWrite(USE_BAT_PIN, 1);  // use ac line power
+    if(link_ok != line_ok_z)
+    {
+      bot.sendMessage(CHAT_ID, "sump pump back to line power\n", "");     
+    }
+
   }
   else
   {
@@ -465,8 +473,13 @@ void loop()
       // still no power but pump has topped. We can turn off battery power until water level reached.
       digitalWrite(USE_BAT_PIN, 1);  // use ac line power
     }
-  }
 
+    if(link_ok != line_ok_z)
+    {
+      bot.sendMessage(CHAT_ID, "sump pump is on battery power\n", "");     
+    }
+  }
+  line_ok_z = link_ok; 
   
   time(&now);
 
