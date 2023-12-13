@@ -27,7 +27,7 @@
 #define AVG_WINDOW                    5     // number of last records for average pump on time calculation
 #define NOMINAL_COUNTS                (AVG_WINDOW + 2)    // use the first NOMINAL_COUNTS pump on durations to calculate nominal pump on duration value
 
-#define ALARM_SEND_INTERVAL           120   // now often to send alarm messages (sec.)
+#define ALARM_SEND_INTERVAL           300   // now often to send alarm messages (sec.)
 #define EVENT_FREQ_CHANGE_THRESHOLD   0.5   // freq of last event deviated from the average by 50% 
 #define DURATION_CHANGE_THRESHOLD     0.2   // last pump on duration deviated from the initial averaged duration by 20%
 #define MIN_PERIOD_INTERVAL           10.   // minimum event interval (more freq than this interval will cause alarm.
@@ -447,7 +447,7 @@ void loop()
   static time_t last_alarm_msg_sent = 0;
   String alarm_msg;
   int alarm = 0;
-  char buf[100];
+  char buf[200];
   static int time_stable_cnt = 0;
   
 
@@ -582,16 +582,21 @@ void loop()
   alarm_msg = "";
   if (nominal_pump_on_time > 0 && avg_period >0)
   {
-    if((((since_last - avg_period) / avg_period )> EVENT_FREQ_CHANGE_THRESHOLD) && (now - last_alarm_msg_sent) > ALARM_SEND_INTERVAL)
+    bool isOver_period = (((since_last - avg_period) / avg_period )> EVENT_FREQ_CHANGE_THRESHOLD);
+    bool isOver_duration = pump_on && (float)((now - pump_on_time) - nominal_pump_on_time)/ nominal_pump_on_time > DURATION_CHANGE_THRESHOLD;
+    if( (isOver_period || isOver_duration) && (now - last_alarm_msg_sent) > ALARM_SEND_INTERVAL)
     {
-      sprintf(buf, "Average period is %.1f (min.). It's already %i\n",avg_period, since_last);  
-      alarm_msg = buf; 
-      alarm_from_update = 1;
-    }
-    else if(pump_on && (float)((now - pump_on_time) - nominal_pump_on_time)/ nominal_pump_on_time > DURATION_CHANGE_THRESHOLD)
-    {
-      sprintf(buf, "Average pump on time is %.1f (sec). It's already %i (sec) and still on\n",nominal_pump_on_time, (now - pump_on_time));  
-      alarm_msg = + buf; 
+      if(isOver_period)
+      {
+        sprintf(buf, "Average period is %.1f (min.). It's already %.1f (min)\n",avg_period, since_last);  
+        alarm_msg = buf; 
+      }
+
+      if(isOver_duration)
+      {
+        sprintf(buf, "Average pump on time is %.1f (sec). It's already %i (sec) and still on\n",nominal_pump_on_time, (now - pump_on_time));  
+        alarm_msg = + buf; 
+      }
       alarm_from_update = 1;
     }
     else
