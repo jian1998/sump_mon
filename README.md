@@ -1,6 +1,7 @@
 # sump_mon
 
 ardrino ide project to use ESP32-CAM as sump pump monitor.
+YouTube Link:  https://youtu.be/eNzcDllqPsk
 
 ## To compile:
 
